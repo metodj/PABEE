@@ -1,4 +1,4 @@
-export GLUE_DIR=/path/to/glue_data
+export GLUE_DIR=/glue
 
 python ./run_glue.py \
   --model_type albert \

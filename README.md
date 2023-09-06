@@ -1,3 +1,13 @@
+# Running instructions
+
+`transformers=2.8.0`
+
+To train model for `cola`, run:
+
+```
+python run_glue.py --model_type albert --model_name_or_path albert-base-v2 --task_name cola --do_train --do_eval --do_lower_case --data_dir glue/cola --max_seq_length 128 --per_gpu_train_batch_size 32 --per_gpu_eval_batch_size 32 --learning_rate 2e-5 --save_steps 100 --logging_steps 100 --num_train_epochs 5 --output_dir output/cola --overwrite_output_dir --overwrite_cache --evaluate_during_training
+```
+
 # Patience-based Early Exit
 
 Code for the paper "[BERT Loses Patience: Fast and Robust Inference with Early Exit](https://proceedings.neurips.cc/paper/2020/file/d4dd111a4fd973394238aca5c05bebe3-Paper.pdf)".
