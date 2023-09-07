@@ -89,6 +89,8 @@ ALL_MODELS = sum(
     (),
 )
 
+print(ALL_MODELS)
+
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
     "xlnet": (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
@@ -215,7 +217,7 @@ def train(args, train_dataset, model, tokenizer):
                 inputs["token_type_ids"] = (
                     batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
                 )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
-            outputs = model(**inputs)
+            outputs, _, _ = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
@@ -312,6 +314,8 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+        # uncomment line below if want to store logits and h for train dataset
+        # eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=False)
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -333,6 +337,7 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
         nb_eval_steps = 0
         preds = None
         out_label_ids = None
+        logits_arr, h_arr, targets = [], [], []
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
             batch = tuple(t.to(args.device) for t in batch)
@@ -343,8 +348,11 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
                     inputs["token_type_ids"] = (
                         batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
                     )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
-                outputs = model(**inputs)
+                outputs, _logits, _h = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
+                logits_arr.append(_logits)
+                h_arr.append(_h)
+                targets.append(inputs["labels"])
 
                 eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
@@ -354,6 +362,14 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+
+        logits_arr = torch.cat(logits_arr, dim=1)
+        h_arr = torch.cat(h_arr, dim=1)
+        targets = torch.cat(targets, dim=0)
+        print(logits_arr.shape, h_arr.shape, targets.shape)
+        torch.save(logits_arr, os.path.join(eval_output_dir, prefix, "logits.pt"))
+        torch.save(h_arr, os.path.join(eval_output_dir, prefix, "h.pt"))
+        torch.save(targets, os.path.join(eval_output_dir, prefix, "targets.pt"))
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":

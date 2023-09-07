@@ -612,7 +612,8 @@ class AlbertModel(AlbertPreTrainedModel):
         )
         encoder_outputs = embedding_output
 
-        if self.training:
+        h_arr = []
+        if self.training or self.patience == 0:
             res = []
             for i in range(self.config.num_hidden_layers):
                 encoder_outputs = self.encoder.adaptive_forward(encoder_outputs,
@@ -624,12 +625,15 @@ class AlbertModel(AlbertPreTrainedModel):
                 pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
                 logits = output_layers[i](output_dropout(pooled_output))
                 res.append(logits)
-        elif self.patience == 0:  # Use all layers for inference
-            encoder_outputs = self.encoder(encoder_outputs,
-                                           extended_attention_mask,
-                                           head_mask=head_mask)
-            pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
-            res = [output_layers[self.config.num_hidden_layers - 1](pooled_output)]
+                h_arr.append(pooled_output)
+
+        # elif self.patience == 0:  # Use all layers for inference
+        #     print("BANANAAAAAAAAAAAAAAA")
+        #     encoder_outputs = self.encoder(encoder_outputs,
+        #                                    extended_attention_mask,
+        #                                    head_mask=head_mask)
+        #     pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
+        #     res = [output_layers[self.config.num_hidden_layers - 1](pooled_output)]
         else:
             patient_counter = 0
             patient_result = None
@@ -668,7 +672,7 @@ class AlbertModel(AlbertPreTrainedModel):
             self.inference_layers_num += calculated_layer_num
             self.inference_instances_num += 1
 
-        return res
+        return res, h_arr
 
 
 class AlbertMLMHead(nn.Module):
@@ -849,7 +853,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 
         """
 
-        logits = self.albert(
+        logits, h_arr = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -860,8 +864,14 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             output_layers=self.classifiers,
             regression=self.num_labels == 1
         )
+        # print('banana')
+        # print(type(logits), len(logits), logits[0].shape)
+        # print(type(h_arr), len(h_arr), h_arr[0].shape)
 
         outputs = (logits[-1],)
+
+        _logits = torch.stack(logits, dim=0)
+        h_arr = torch.stack(h_arr, dim=0)
 
         if labels is not None:
             total_loss = None
@@ -881,7 +891,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
                 total_weights += ix + 1
             outputs = (total_loss / total_weights,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return outputs, _logits, h_arr  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
