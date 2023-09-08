@@ -313,9 +313,8 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
-        # uncomment line below if want to store logits and h for train dataset
-        # eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=False)
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)  # dev or test, to evaluate on test rename test.tsv to dev.tsv :)
+        # eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=False)  # train
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -366,10 +365,10 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
         logits_arr = torch.cat(logits_arr, dim=1)
         h_arr = torch.cat(h_arr, dim=1)
         targets = torch.cat(targets, dim=0)
-        print(logits_arr.shape, h_arr.shape, targets.shape)
-        torch.save(logits_arr, os.path.join(eval_output_dir, prefix, "logits.pt"))
-        torch.save(h_arr, os.path.join(eval_output_dir, prefix, "h.pt"))
-        torch.save(targets, os.path.join(eval_output_dir, prefix, "targets.pt"))
+        # print(logits_arr.shape, h_arr.shape, targets.shape)
+        # torch.save(logits_arr, os.path.join(eval_output_dir, prefix, "logits_test.pt"))
+        # torch.save(h_arr, os.path.join(eval_output_dir, prefix, "h_test.pt"))
+        # torch.save(targets, os.path.join(eval_output_dir, prefix, "targets_test.pt"))
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
@@ -423,9 +422,12 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
-        examples = (
-            processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-        )
+
+        if evaluate:
+            examples = (processor.get_dev_examples(args.data_dir))
+        else:
+            examples = (processor.get_train_examples(args.data_dir))
+        
         features = convert_examples_to_features(
             examples,
             tokenizer,
