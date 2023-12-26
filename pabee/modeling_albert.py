@@ -864,9 +864,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             output_layers=self.classifiers,
             regression=self.num_labels == 1
         )
-        print('banana')
-        print(type(logits), len(logits), logits[0].shape)
-        print(type(h_arr), len(h_arr), h_arr[0].shape)
 
         outputs = (logits[-1],)
 
@@ -899,15 +896,15 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class AlbertCQR(AlbertPreTrainedModel):
+class AlbertQR(AlbertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.num_hidden_layers == 1
+        assert config.num_labels == 1
         self.num_labels = config.num_labels + 1
 
         self.albert = AlbertModel(config)
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)])
+        self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, self.num_labels) for _ in range(config.num_hidden_layers)])
 
         self.init_weights()
 
@@ -970,11 +967,8 @@ class AlbertCQR(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_dropout=self.dropout,
             output_layers=self.classifiers,
-            regression=True
+            regression=self.num_labels == 1
         )
-        # print('banana')
-        # print(type(logits), len(logits), logits[0].shape)
-        # print(type(h_arr), len(h_arr), h_arr[0].shape)
 
         outputs = (logits[-1],)
 
@@ -985,13 +979,7 @@ class AlbertCQR(AlbertPreTrainedModel):
             total_loss = None
             total_weights = 0
             for ix, logits_item in enumerate(logits):
-                if self.num_labels == 1:
-                    #  We are doing regression
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits_item.view(-1), labels.view(-1))
-                else:
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits_item.view(-1, self.num_labels), labels.view(-1))
+                loss = self.pinball_loss(logits_item, labels)
                 if total_loss is None:
                     total_loss = loss
                 else:
@@ -1000,6 +988,23 @@ class AlbertCQR(AlbertPreTrainedModel):
             outputs = (total_loss / total_weights,) + outputs
 
         return outputs, _logits, h_arr  # (loss), logits, (hidden_states), (attentions)
+    
+    @staticmethod
+    def pinball_loss(p, y, alpha1=0.025, alpha2=0.975):
+        """
+        Pinball loss for quantile regression
+        
+        Parameters
+        
+        p: torch.Tensor
+            prediction (batch_size, 2)
+        """
+        p1, p2 = p[:, 0], p[:, 1]
+        diff1 = y - p1
+        loss1 = torch.where(diff1 > 0, alpha1 * diff1, (1 - alpha1) * -diff1)
+        diff2 = y - p2
+        loss2 = torch.where(diff2 > 0, alpha2 * diff2, (1 - alpha2) * -diff2)
+        return torch.mean(loss1 + loss2)
 
 
 @add_start_docstrings(
