@@ -864,6 +864,114 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             output_layers=self.classifiers,
             regression=self.num_labels == 1
         )
+        print('banana')
+        print(type(logits), len(logits), logits[0].shape)
+        print(type(h_arr), len(h_arr), h_arr[0].shape)
+
+        outputs = (logits[-1],)
+
+        _logits = torch.stack(logits, dim=0)
+        h_arr = torch.stack(h_arr, dim=0)
+
+        if labels is not None:
+            total_loss = None
+            total_weights = 0
+            for ix, logits_item in enumerate(logits):
+                if self.num_labels == 1:
+                    #  We are doing regression
+                    loss_fct = MSELoss()
+                    loss = loss_fct(logits_item.view(-1), labels.view(-1))
+                else:
+                    loss_fct = CrossEntropyLoss()
+                    loss = loss_fct(logits_item.view(-1, self.num_labels), labels.view(-1))
+                if total_loss is None:
+                    total_loss = loss
+                else:
+                    total_loss += loss * (ix + 1)
+                total_weights += ix + 1
+            outputs = (total_loss / total_weights,) + outputs
+
+        return outputs, _logits, h_arr  # (loss), logits, (hidden_states), (attentions)
+    
+
+@add_start_docstrings(
+    """Albert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for GLUE tasks. """,
+    ALBERT_START_DOCSTRING,
+)
+class AlbertCQR(AlbertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        assert config.num_hidden_layers == 1
+        self.num_labels = config.num_labels + 1
+
+        self.albert = AlbertModel(config)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)])
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
+        loss: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Classification (or regression if config.num_labels==1) loss.
+        logits ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+        Examples::
+
+            from transformers import AlbertTokenizer, AlbertForSequenceClassification
+            import torch
+
+            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+            model = AlbertForSequenceClassification.from_pretrained('albert-base-v2')
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+            labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=labels)
+            loss, logits = outputs[:2]
+
+        """
+
+        logits, h_arr = self.albert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_dropout=self.dropout,
+            output_layers=self.classifiers,
+            regression=True
+        )
         # print('banana')
         # print(type(logits), len(logits), logits[0].shape)
         # print(type(h_arr), len(h_arr), h_arr[0].shape)

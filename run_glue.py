@@ -697,6 +697,11 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
+    # print(type(model))
+    # print(config.num_labels)
+    # print(config)
+    # return
+
     # Training
     if args.do_train:
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
