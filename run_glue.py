@@ -366,11 +366,11 @@ def evaluate(args, model, tokenizer, prefix="", patience=0):
         logits_arr = torch.cat(logits_arr, dim=1)
         h_arr = torch.cat(h_arr, dim=1)
         targets = torch.cat(targets, dim=0)
-        print("KEKEEEEEEC")
-        print(logits_arr.shape, h_arr.shape, targets.shape, preds.shape)
-        torch.save(logits_arr, os.path.join(eval_output_dir, prefix, "logits_test.pt"))
-        torch.save(h_arr, os.path.join(eval_output_dir, prefix, "h_test.pt"))
-        torch.save(targets, os.path.join(eval_output_dir, prefix, "targets_test.pt"))
+        # print("KEKEEEEEEC")
+        # print(logits_arr.shape, h_arr.shape, targets.shape, preds.shape)
+        # torch.save(logits_arr, os.path.join(eval_output_dir, prefix, "logits_test.pt"))
+        # torch.save(h_arr, os.path.join(eval_output_dir, prefix, "h_test.pt"))
+        # torch.save(targets, os.path.join(eval_output_dir, prefix, "targets_test.pt"))
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
